@@ -1,8 +1,9 @@
+// Copyrights by Makerindo EDU
 #include <Arduino_GFX_Library.h>
 #include <Wire.h>
 #include <Adafruit_BME280.h>
 #include <Adafruit_Sensor.h>
-#include "RTClib.h"
+#include <RTClib.h>
 
 //LCD TFT
 #define SEALEVELPRESSURE_HPA (1013.25)
@@ -13,8 +14,8 @@
 #define TFT_DC     5
 #define TFT_RESET  4
 #define TFT_CS     2
-//SCL 22
-//SDA 21
+#define SCL 22
+#define SDA 21
 #define relay 27
 #define buzzer 26
 #define button 25
@@ -33,7 +34,7 @@ void setup()
   pinMode(buzzer, OUTPUT);
   pinMode(led, OUTPUT);
   pinMode(button, INPUT);
-  Serial.begin(9600);
+  Serial.begin(57600);
 
   if (!bme.begin(0x76)) { //0x76 alamat i2c hasil scan
     Serial.println("tidak ada sensor BME280, Coba cek rangkaianmu!");

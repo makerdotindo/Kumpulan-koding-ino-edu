@@ -2,14 +2,16 @@
 #include <WiFiClient.h>
 #include <WebServer.h>
 #include <uri/UriBraces.h>
-#define WIFI_SSID "Wokwi-GUEST"
-#define WIFI_PASSWORD ""
-// Defining the WiFi channel speeds up the connection:
-#define WIFI_CHANNEL 6
 
+const char* SSID = "MAKERINDO2";
+const char* PASSWORD = "makerindo2019";
+//#define WIFI_SSID = "MAKERINDO2"
+//#define WIFI_PASSWORD = "makerindo2019"
+// Defining the WiFi channel speeds up the connection:
+//#define WIFI_CHANNEL 6
 WebServer server(80);
-const int LED1 = 26;
-const int LED2 = 27;
+const int LED1 = 23;
+const int LED2 = 22;
 bool led1State = false;
 bool led2State = false;
 void sendHtml() {
@@ -52,9 +54,9 @@ void setup(void) {
   pinMode(LED1, OUTPUT);
   pinMode(LED2, OUTPUT);
 
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD, WIFI_CHANNEL);
+ WiFi.begin(SSID,PASSWORD);
   Serial.print("Connecting to WiFi ");
-  Serial.print(WIFI_SSID);
+  Serial.print(SSID);
   // Wait for connection
   while (WiFi.status() != WL_CONNECTED) {
     delay(100);
@@ -69,7 +71,6 @@ void setup(void) {
     String led = server.pathArg(0);
     Serial.print("Toggle LED #");
     Serial.println(led);
-
     switch (led.toInt()) {
       case 1:
         led1State = !led1State;

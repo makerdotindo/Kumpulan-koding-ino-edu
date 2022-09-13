@@ -1,86 +1,57 @@
-#include <WiFi.h>// sesuaikan dengan jenis ESP
-#include <WiFiClient.h> // sesuaikan dengan jenis ESP
+
+#include <WiFiClient.h>
+#include <WiFi.h>
+#include <WebServer.h>
+#include <Wire.h>
+ 
+// Ganti dengan password Jaringan WiFi yang user miliki
 const char* ssid = "MAKERINDO2";
 const char* password = "makerindo2019";
-int ledPin = 2;
-//int buz=23;
-WiFiServer server(80);
-void setup() {
- Serial.begin(115200);
- delay(10);
- pinMode(ledPin, OUTPUT);
- digitalWrite(ledPin, LOW);
- //pinMode(buz, OUTPUT);
- //digitalWrite(buz, LOW);
- // Connect to WiFi network
- Serial.println();
- Serial.println();
- Serial.print("Connecting to ");
- Serial.println(ssid);
- WiFi.begin(ssid, password);
- while (WiFi.status() != WL_CONNECTED) {
- delay(500);
- Serial.print(".");
- }
- Serial.println("");
- Serial.println("WiFi connected");
- // Start the server
- server.begin();
- Serial.println("Server started");
- // Print the IP address
- Serial.print("Use this URL : ");
- Serial.print("http://");
- Serial.print(WiFi.localIP());
- Serial.println("/");
+ 
+WebServer server(80);   //Inisialisasi server pada port 80
+ 
+String page = "";
+int LEDPin = 13; //Pin yang digunakan untuk mengendalikan LED
+void setup(void){
+  //the HTML of the web page
+  page = "<h1>Simple NodeMCU Web Server</h1><p><a href=\"LEDOn\"><button>ON</button></a>&nbsp;<a href=\"LEDOff\"><button>OFF</button></a></p>";
+  //Inisialisasi pin D4 padam ketika NodeMCU pertama kali menyala
+  pinMode(LEDPin, OUTPUT);
+  digitalWrite(LEDPin, LOW);
+   
+  delay(1000);
+  Serial.begin(115200);
+  WiFi.begin(ssid, password); //begin WiFi connection
+  Serial.println("");
+ 
+  // Wait for connection
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.print("Connected to ");
+  Serial.println(ssid);
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+   
+  server.on("/", [](){
+    server.send(200, "text/html", page);
+  });
+  server.on("/LEDOn", [](){
+    server.send(200, "text/html", page);
+    digitalWrite(LEDPin, HIGH);
+    delay(1000);
+  });
+  server.on("/LEDOff", [](){
+    server.send(200, "text/html", page);
+    digitalWrite(LEDPin, LOW);
+    delay(1000); 
+  });
+  server.begin();
+  Serial.println("Web server started!");
 }
-void loop() {
- // Check if a client has connected
- WiFiClient client = server.available();
- if (!client) {
- return;
- }
- // Wait until the client sends some data
- Serial.println("new client");
- while(!client.available()){
- delay(1);
- }
- // Read the first line of the request
- String request = client.readStringUntil('\r');
- Serial.println(request);
- client.flush();
- // Match the request
- int value = LOW;
- if (request.indexOf("/LED=ON") != -1) {
- digitalWrite(ledPin, HIGH);
- value = HIGH;
- //digitalWrite(buz, HIGH);
- //value = HIGH;
- }
- if (request.indexOf("/LED=OFF") != -1){
- digitalWrite(ledPin, LOW);
- value = LOW;
- //digitalWrite(buz, LOW);
- //value = LOW;
- }
- // Return the response
- client.println("HTTP/1.1 200 OK");
- client.println("Content-Type: text/html");
- client.println(""); // do not forget this one
- client.println("<!DOCTYPE HTML>");
- client.println("<html>");
-client.print("Led pin is now: ");
- if(value == HIGH) {
- client.print("On");
- } else {
- client.print("Off");
- }
- client.println("<br><br>");
- client.println("Click <a href=\"/LED=ON\">here</a> turn the LED on pin 2 ON<br>");
- client.println("Click <a href=\"/LED=OFF\">here</a> turn the LED on pin 2 OFF<br>");
- //client.println("Click <a href=\"/BUZ=ON\">here</a> turn the LED on pin 23 ON<br>");
- //client.println("Click <a href=\"/BUZ=OFF\">here</a> turn the LED on pin 23 OFF<br>");
- client.println("</html>");
- delay(1);
- Serial.println("Client disconnected");
- Serial.println("");
+ 
+void loop(void){
+  server.handleClient();
 }

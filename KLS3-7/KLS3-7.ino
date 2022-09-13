@@ -65,11 +65,11 @@ long speedtest(int buf_size) {
 
 void loop() {
   Serial.println(speedtest(50));
-  delay(5000);
+  delay(500);
   Serial.println(speedtest(500));
-  delay(5000);
+  delay(500);
   Serial.println(speedtest(1000));
-  delay(5000);
+  delay(500);
   Serial.println(speedtest(2000));
-  delay(5000);
+  delay(500);
 }

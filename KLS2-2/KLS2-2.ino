@@ -1,48 +1,31 @@
-/*
- *  This sketch demonstrates how to scan WiFi networks.
- *  The API is almost the same as with the WiFi Shield library,
- *  the most obvious difference being the different file you need to include:
- */
-#include "WiFi.h"
+// Complete Instructions: https://RandomNerdTutorials.com/esp32-digital-inputs-outputs-arduino/
 
-void setup()
-{
-    Serial.begin(115200);
+// set pin numbers
+const int PotenPin = 34;  // the number of the pushPoten pin
+const int ledPin =  2;    // the number of the LED pin
 
-    // Set WiFi to station mode and disconnect from an AP if it was previously connected
-    WiFi.mode(WIFI_STA);
-    WiFi.disconnect();
-    delay(100);
+// variable for storing the pushPoten status 
+int PotenState = 0;
 
-    Serial.println("Setup done");
+void setup() {
+  Serial.begin(115200);  
+  // initialize the pushPoten pin as an input
+  pinMode(PotenPin, INPUT);
+  // initialize the LED pin as an output
+  pinMode(ledPin, OUTPUT);
 }
 
-void loop()
-{
-    Serial.println("scan start");
-
-    // WiFi.scanNetworks will return the number of networks found
-    int n = WiFi.scanNetworks();
-    Serial.println("scan done");
-    if (n == 0) {
-        Serial.println("no networks found");
-    } else {
-        Serial.print(n);
-        Serial.println(" networks found");
-        for (int i = 0; i < n; ++i) {
-            // Print SSID and RSSI for each network found
-            Serial.print(i + 1);
-            Serial.print(": ");
-            Serial.print(WiFi.SSID(i));
-            Serial.print(" (");
-            Serial.print(WiFi.RSSI(i));
-            Serial.print(")");
-            Serial.println((WiFi.encryptionType(i) == WIFI_AUTH_OPEN)?" ":"*");
-            delay(10);
-        }
-    }
-    Serial.println("");
-
-    // Wait a bit before scanning again
-    delay(5000);
+void loop() {
+  // read the state of the pushPoten value
+  PotenState = digitalRead(PotenPin);
+  Serial.println(PotenState);
+  // check if the pushPoten is pressed.
+  // if it is, the PotenState is HIGH
+  if (PotenState == HIGH) {
+    // turn LED on
+    digitalWrite(ledPin, HIGH);
+  } else {
+    // turn LED off
+    digitalWrite(ledPin, LOW);
+  }
 }

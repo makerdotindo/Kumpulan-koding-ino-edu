@@ -1,13 +1,18 @@
 //--------------- SENDING DATA FROM WEMOS TO THINGSPEAK ------------
+//Copyright by MAKERINDO EDU 2022
+#include <WiFiClient.h>
+#include <WiFi.h>
+#include <WebServer.h>
+#include <Wire.h>
 
 #include <DHT.h>
-#include <WiFi.h>
-// Deklarasi Wifi dan API KEY ke Thingspeak
 
+// Ganti dengan password Jaringan WiFi yang user miliki
+const char* ssid = "Oscar Rachman";
+const char* password = "RaiRaka123";
+ 
 int Lampu = 2;
 String apiKey = "CE5XPIUQ434TPSCD"; // 
-const char* ssid = "Oscar Rachman";       // SSID
-const char* password = "RaiRaka123"; 
 const char* server = "api.thingspeak.com";
 
 // Deklarasi variabel 

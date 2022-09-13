@@ -1,252 +1,169 @@
 /*********
   Rui Santos
-  Complete instructions at https://RandomNerdTutorials.com/esp32-wi-fi-manager-asyncwebserver/
+  Complete project details at https://RandomNerdTutorials.com/esp32-esp8266-web-server-timer-pulse/
   
-  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files.
-  The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
 *********/
 
-#include <Arduino.h>
-#include <WiFi.h>
+// Import required libraries
+#ifdef ESP32
+  #include <WiFi.h>
+  #include <AsyncTCP.h>
+#else
+  #include <ESP8266WiFi.h>
+  #include <ESPAsyncTCP.h>
+#endif
 #include <ESPAsyncWebServer.h>
-#include <AsyncTCP.h>
-#include "SPIFFS.h"
+
+// Replace with your network credentials
+const char* ssid = "MAKERINDO2";
+const char* password = "makerindo2019";
+
+const char* PARAM_INPUT_1 = "state";
+const char* PARAM_INPUT_2 = "value";
+
+const int output = 2;
+
+String timerSliderValue = "10";
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
 
-// Search for parameter in HTTP POST request
-const char* PARAM_INPUT_1 = "MAKERINDO2";
-const char* PARAM_INPUT_2 = "makerindo2019";
-const char* PARAM_INPUT_3 = "192.168.1.48";
-const char* PARAM_INPUT_4 = "255, 255, 0, 0";
-
-
-//Variables to save values from HTML form
-String ssid;
-String pass;
-String ip;
-String gateway;
-
-// File paths to save input values permanently
-const char* ssidPath = "/ssid.txt";
-const char* passPath = "/pass.txt";
-const char* ipPath = "/ip.txt";
-const char* gatewayPath = "/gateway.txt";
-
-IPAddress localIP;
-//IPAddress localIP(192, 168, 1, 200); // hardcoded
-
-// Set your Gateway IP address
-IPAddress localGateway;
-//IPAddress localGateway(192, 168, 1, 1); //hardcoded
-IPAddress subnet(255, 255, 0, 0);
-
-// Timer variables
-unsigned long previousMillis = 0;
-const long interval = 10000;  // interval to wait for Wi-Fi connection (milliseconds)
-
-// Set LED GPIO
-const int ledPin = 2;
-// Stores LED state
-
-String ledState;
-
-// Initialize SPIFFS
-void initSPIFFS() {
-  if (!SPIFFS.begin(true)) {
-    Serial.println("An error has occurred while mounting SPIFFS");
-  }
-  Serial.println("SPIFFS mounted successfully");
-}
-
-// Read File from SPIFFS
-String readFile(fs::FS &fs, const char * path){
-  Serial.printf("Reading file: %s\r\n", path);
-
-  File file = fs.open(path);
-  if(!file || file.isDirectory()){
-    Serial.println("- failed to open file for reading");
-    return String();
-  }
-  
-  String fileContent;
-  while(file.available()){
-    fileContent = file.readStringUntil('\n');
-    break;     
-  }
-  return fileContent;
-}
-
-// Write file to SPIFFS
-void writeFile(fs::FS &fs, const char * path, const char * message){
-  Serial.printf("Writing file: %s\r\n", path);
-
-  File file = fs.open(path, FILE_WRITE);
-  if(!file){
-    Serial.println("- failed to open file for writing");
-    return;
-  }
-  if(file.print(message)){
-    Serial.println("- file written");
-  } else {
-    Serial.println("- frite failed");
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML><html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ESP Web Server</title>
+  <style>
+    html {font-family: Arial; display: inline-block; text-align: center;}
+    h2 {font-size: 2.4rem;}
+    p {font-size: 2.2rem;}
+    body {max-width: 600px; margin:0px auto; padding-bottom: 25px;}
+    .switch {position: relative; display: inline-block; width: 120px; height: 68px} 
+    .switch input {display: none}
+    .slider {position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; border-radius: 34px}
+    .slider:before {position: absolute; content: ""; height: 52px; width: 52px; left: 8px; bottom: 8px; background-color: #fff; -webkit-transition: .4s; transition: .4s; border-radius: 68px}
+    input:checked+.slider {background-color: #2196F3}
+    input:checked+.slider:before {-webkit-transform: translateX(52px); -ms-transform: translateX(52px); transform: translateX(52px)}
+    .slider2 { -webkit-appearance: none; margin: 14px; width: 300px; height: 20px; background: #ccc;
+      outline: none; -webkit-transition: .2s; transition: opacity .2s;}
+    .slider2::-webkit-slider-thumb {-webkit-appearance: none; appearance: none; width: 30px; height: 30px; background: #2f4468; cursor: pointer;}
+    .slider2::-moz-range-thumb { width: 30px; height: 30px; background: #2f4468; cursor: pointer; } 
+  </style>
+</head>
+<body>
+  <h2>ESP Web Server</h2>
+  <p><span id="timerValue">%TIMERVALUE%</span> s</p>
+  <p><input type="range" onchange="updateSliderTimer(this)" id="timerSlider" min="1" max="20" value="%TIMERVALUE%" step="1" class="slider2"></p>
+  %BUTTONPLACEHOLDER%
+<script>
+function toggleCheckbox(element) {
+  var sliderValue = document.getElementById("timerSlider").value;
+  var xhr = new XMLHttpRequest();
+  if(element.checked){ xhr.open("GET", "/update?state=1", true); xhr.send();
+    var count = sliderValue, timer = setInterval(function() {
+      count--; document.getElementById("timerValue").innerHTML = count;
+      if(count == 0){ clearInterval(timer); document.getElementById("timerValue").innerHTML = document.getElementById("timerSlider").value; }
+    }, 1000);
+    sliderValue = sliderValue*1000;
+    setTimeout(function(){ xhr.open("GET", "/update?state=0", true); 
+    document.getElementById(element.id).checked = false; xhr.send(); }, sliderValue);
   }
 }
-
-// Initialize WiFi
-bool initWiFi() {
-  if(ssid=="" || ip==""){
-    Serial.println("Undefined SSID or IP address.");
-    return false;
-  }
-
-  WiFi.mode(WIFI_STA);
-  localIP.fromString(ip.c_str());
-  localGateway.fromString(gateway.c_str());
-
-
-  if (!WiFi.config(localIP, localGateway, subnet)){
-    Serial.println("STA Failed to configure");
-    return false;
-  }
-  WiFi.begin(ssid.c_str(), pass.c_str());
-  Serial.println("Connecting to WiFi...");
-
-  unsigned long currentMillis = millis();
-  previousMillis = currentMillis;
-
-  while(WiFi.status() != WL_CONNECTED) {
-    currentMillis = millis();
-    if (currentMillis - previousMillis >= interval) {
-      Serial.println("Failed to connect.");
-      return false;
-    }
-  }
-
-  Serial.println(WiFi.localIP());
-  return true;
+function updateSliderTimer(element) {
+  var sliderValue = document.getElementById("timerSlider").value;
+  document.getElementById("timerValue").innerHTML = sliderValue;
+  var xhr = new XMLHttpRequest();
+  xhr.open("GET", "/slider?value="+sliderValue, true);
+  xhr.send();
 }
+</script>
+</body>
+</html>
+)rawliteral";
 
-// Replaces placeholder with LED state value
-String processor(const String& var) {
-  if(var == "STATE") {
-    if(digitalRead(ledPin)) {
-      ledState = "ON";
-    }
-    else {
-      ledState = "OFF";
-    }
-    return ledState;
+// Replaces placeholder with button section in your web page
+String processor(const String& var){
+  //Serial.println(var);
+  if(var == "BUTTONPLACEHOLDER"){
+    String buttons = "";
+    String outputStateValue = outputState();
+    buttons+= "<p><label class=\"switch\"><input type=\"checkbox\" onchange=\"toggleCheckbox(this)\" id=\"output\" " + outputStateValue + "><span class=\"slider\"></span></label></p>";
+    return buttons;
+  }
+  else if(var == "TIMERVALUE"){
+    return timerSliderValue;
   }
   return String();
 }
 
-void setup() {
+String outputState(){
+  if(digitalRead(output)){
+    return "checked";
+  }
+  else {
+    return "";
+  }
+  return "";
+}
+
+void setup(){
   // Serial port for debugging purposes
   Serial.begin(115200);
 
-  initSPIFFS();
+  pinMode(output, OUTPUT);
+  digitalWrite(output, LOW);
 
-  // Set GPIO 2 as an OUTPUT
-  pinMode(ledPin, OUTPUT);
-  digitalWrite(ledPin, LOW);
+  // Connect to Wi-Fi
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Connecting to WiFi..");
+  }
+
+  // Print ESP Local IP Address
+  Serial.println(WiFi.localIP());
+
+  // Route for root / web page
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/html", index_html, processor);
+  });
+
+  // Send a GET request to <ESP_IP>/update?state=<inputMessage>
+  server.on("/update", HTTP_GET, [] (AsyncWebServerRequest *request) {
+    String inputMessage;
+    // GET input1 value on <ESP_IP>/update?state=<inputMessage>
+    if (request->hasParam(PARAM_INPUT_1)) {
+      inputMessage = request->getParam(PARAM_INPUT_1)->value();
+      digitalWrite(output, inputMessage.toInt());
+    }
+    else {
+      inputMessage = "No message sent";
+    }
+    Serial.println(inputMessage);
+    request->send(200, "text/plain", "OK");
+  });
   
-  // Load values saved in SPIFFS
-  ssid = readFile(SPIFFS, ssidPath);
-  pass = readFile(SPIFFS, passPath);
-  ip = readFile(SPIFFS, ipPath);
-  gateway = readFile (SPIFFS, gatewayPath);
-  Serial.println(ssid);
-  Serial.println(pass);
-  Serial.println(ip);
-  Serial.println(gateway);
-
-  if(initWiFi()) {
-    // Route for root / web page
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-      request->send(SPIFFS, "/index.html", "text/html", false, processor);
-    });
-    server.serveStatic("/", SPIFFS, "/");
-    
-    // Route to set GPIO state to HIGH
-    server.on("/on", HTTP_GET, [](AsyncWebServerRequest *request) {
-      digitalWrite(ledPin, HIGH);
-      request->send(SPIFFS, "/index.html", "text/html", false, processor);
-    });
-
-    // Route to set GPIO state to LOW
-    server.on("/off", HTTP_GET, [](AsyncWebServerRequest *request) {
-      digitalWrite(ledPin, LOW);
-      request->send(SPIFFS, "/index.html", "text/html", false, processor);
-    });
-    server.begin();
-  }
-  else {
-    // Connect to Wi-Fi network with SSID and password
-    Serial.println("Setting AP (Access Point)");
-    // NULL sets an open Access Point
-    WiFi.softAP("ESP-WIFI-MANAGER", NULL);
-
-    IPAddress IP = WiFi.softAPIP();
-    Serial.print("AP IP address: ");
-    Serial.println(IP); 
-
-    // Web Server Root URL
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-      request->send(SPIFFS, "/wifimanager.html", "text/html");
-    });
-    
-    server.serveStatic("/", SPIFFS, "/");
-    
-    server.on("/", HTTP_POST, [](AsyncWebServerRequest *request) {
-      int params = request->params();
-      for(int i=0;i<params;i++){
-        AsyncWebParameter* p = request->getParam(i);
-        if(p->isPost()){
-          // HTTP POST ssid value
-          if (p->name() == PARAM_INPUT_1) {
-            ssid = p->value().c_str();
-            Serial.print("SSID set to: ");
-            Serial.println(ssid);
-            // Write file to save value
-            writeFile(SPIFFS, ssidPath, ssid.c_str());
-          }
-          // HTTP POST pass value
-          if (p->name() == PARAM_INPUT_2) {
-            pass = p->value().c_str();
-            Serial.print("Password set to: ");
-            Serial.println(pass);
-            // Write file to save value
-            writeFile(SPIFFS, passPath, pass.c_str());
-          }
-          // HTTP POST ip value
-          if (p->name() == PARAM_INPUT_3) {
-            ip = p->value().c_str();
-            Serial.print("IP Address set to: ");
-            Serial.println(ip);
-            // Write file to save value
-            writeFile(SPIFFS, ipPath, ip.c_str());
-          }
-          // HTTP POST gateway value
-          if (p->name() == PARAM_INPUT_4) {
-            gateway = p->value().c_str();
-            Serial.print("Gateway set to: ");
-            Serial.println(gateway);
-            // Write file to save value
-            writeFile(SPIFFS, gatewayPath, gateway.c_str());
-          }
-          //Serial.printf("POST[%s]: %s\n", p->name().c_str(), p->value().c_str());
-        }
-      }
-      request->send(200, "text/plain", "Done. ESP will restart, connect to your router and go to IP address: " + ip);
-      delay(3000);
-      ESP.restart();
-    });
-    server.begin();
-  }
+  // Send a GET request to <ESP_IP>/slider?value=<inputMessage>
+  server.on("/slider", HTTP_GET, [] (AsyncWebServerRequest *request) {
+    String inputMessage;
+    // GET input1 value on <ESP_IP>/slider?value=<inputMessage>
+    if (request->hasParam(PARAM_INPUT_2)) {
+      inputMessage = request->getParam(PARAM_INPUT_2)->value();
+      timerSliderValue = inputMessage;
+    }
+    else {
+      inputMessage = "No message sent";
+    }
+    Serial.println(inputMessage);
+    request->send(200, "text/plain", "OK");
+  });
+  
+  // Start server
+  server.begin();
 }
-
+  
 void loop() {
-
+  
 }

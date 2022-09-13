@@ -7,8 +7,8 @@
 //#define DHTTYPE DHT21 // DHT 21 (AM2301)
 //#define DHTTYPE DHT22 // DHT 22 (AM2302), AM2321
 // Silahkan ganti ssid dan pasword sesuai wifi yang dipakai (bukan ssid dan pass esp8266nya)
-const char* ssid = "Oscar Rachman";
-const char* password = "RaiRaka123";
+const char* ssid = "MAKERINDO2";
+const char* password = "makerindo2019";
 // Web Server on port 80
 WiFiServer server(80);
 //PIN DHT Sensor yang dipakai

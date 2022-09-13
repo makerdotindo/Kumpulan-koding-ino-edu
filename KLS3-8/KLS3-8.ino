@@ -1,193 +1,76 @@
-/*********
-  Rui Santos
-  Complete project details at https://RandomNerdTutorials.com/esp32-web-server-sent-events-sse/
-  
-  Permission is hereby granted, free of charge, to any person obtaining a copy
-  of this software and associated documentation files.
-  
-  The above copyright notice and this permission notice shall be included in all
-  copies or substantial portions of the Software.
-*********/
-
-#include <WiFi.h>
-#include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
+// Copyrights by Makerindo EDU
+#include <Arduino_GFX_Library.h>
+#include <Wire.h>
 #include <Adafruit_BME280.h>
 #include <Adafruit_Sensor.h>
+#include <RTClib.h>
 
-// Replace with your network credentials
-const char* ssid = "MAKERINDO2";
-const char* password = "makerindo2019";
+//LCD TFT
+#define SEALEVELPRESSURE_HPA (1013.25)
+#define TFT_MISO   19 //SDO
+//defihne LED ke 3.3v
+#define TFT_SCK    18
+#define TFT_MOSI   23 //SDI
+#define TFT_DC     5
+#define TFT_RESET  4
+#define TFT_CS     2
+#define SCL 22
+#define SDA 21
 
-// Create AsyncWebServer object on port 80
-AsyncWebServer server(80);
 
-// Create an Event Source on /events
-AsyncEventSource events("/events");
+RTC_DS1307 rtc;
+Adafruit_BME280 bme;
+Arduino_ESP32SPI bus = Arduino_ESP32SPI(TFT_DC, TFT_CS, TFT_SCK, TFT_MOSI, TFT_MISO);
+Arduino_ILI9341 display = Arduino_ILI9341(&bus, TFT_RESET);
 
-// Timer variables
-unsigned long lastTime = 0;  
-unsigned long timerDelay = 30000;
+char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
-// Create a sensor object
-Adafruit_BME280 bme;         // BME280 connect to ESP32 I2C (GPIO 21 = SDA, GPIO 22 = SCL)
-
-float temperature;
-float humidity;
-float pressure;
-
-// Init BME280
-void initBME(){
-    if (!bme.begin(0x76)) {
-    Serial.println("Could not find a valid BME280 sensor, check wiring!");
-    while (1);
-  }
-}
-
-void getSensorReadings(){
-  temperature = bme.readTemperature();
-  // Convert temperature to Fahrenheit
-  //temperature = 1.8 * bme.readTemperature() + 32;
-  humidity = bme.readHumidity();
-  pressure = bme.readPressure()/ 100.0F;
-}
-
-// Initialize WiFi
-void initWiFi() {
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(ssid, password);
-    Serial.print("Connecting to WiFi ..");
-    while (WiFi.status() != WL_CONNECTED) {
-        Serial.print('.');
-        delay(1000);
-    }
-    Serial.println(WiFi.localIP());
-}
-
-String processor(const String& var){
-  getSensorReadings();
-  //Serial.println(var);
-  if(var == "TEMPERATURE"){
-    return String(temperature);
-  }
-  else if(var == "HUMIDITY"){
-    return String(humidity);
-  }
-  else if(var == "PRESSURE"){
-    return String(pressure);
-  }
-  return String();
-}
-
-const char index_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE HTML><html>
-<head>
-  <title>ESP Web Server</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
-  <link rel="icon" href="data:,">
-  <style>
-    html {font-family: Arial; display: inline-block; text-align: center;}
-    p { font-size: 1.2rem;}
-    body {  margin: 0;}
-    .topnav { overflow: hidden; background-color: #50B8B4; color: white; font-size: 1rem; }
-    .content { padding: 20px; }
-    .card { background-color: white; box-shadow: 2px 2px 12px 1px rgba(140,140,140,.5); }
-    .cards { max-width: 800px; margin: 0 auto; display: grid; grid-gap: 2rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
-    .reading { font-size: 1.4rem; }
-  </style>
-</head>
-<body>
-  <div class="topnav">
-    <h1>BME280 WEB SERVER (SSE)</h1>
-  </div>
-  <div class="content">
-    <div class="cards">
-      <div class="card">
-        <p><i class="fas fa-thermometer-half" style="color:#059e8a;"></i> TEMPERATURE</p><p><span class="reading"><span id="temp">%TEMPERATURE%</span> &deg;C</span></p>
-      </div>
-      <div class="card">
-        <p><i class="fas fa-tint" style="color:#00add6;"></i> HUMIDITY</p><p><span class="reading"><span id="hum">%HUMIDITY%</span> &percnt;</span></p>
-      </div>
-      <div class="card">
-        <p><i class="fas fa-angle-double-down" style="color:#e1e437;"></i> PRESSURE</p><p><span class="reading"><span id="pres">%PRESSURE%</span> hPa</span></p>
-      </div>
-    </div>
-  </div>
-<script>
-if (!!window.EventSource) {
- var source = new EventSource('/events');
- 
- source.addEventListener('open', function(e) {
-  console.log("Events Connected");
- }, false);
- source.addEventListener('error', function(e) {
-  if (e.target.readyState != EventSource.OPEN) {
-    console.log("Events Disconnected");
-  }
- }, false);
- 
- source.addEventListener('message', function(e) {
-  console.log("message", e.data);
- }, false);
- 
- source.addEventListener('temperature', function(e) {
-  console.log("temperature", e.data);
-  document.getElementById("temp").innerHTML = e.data;
- }, false);
- 
- source.addEventListener('humidity', function(e) {
-  console.log("humidity", e.data);
-  document.getElementById("hum").innerHTML = e.data;
- }, false);
- 
- source.addEventListener('pressure', function(e) {
-  console.log("pressure", e.data);
-  document.getElementById("pres").innerHTML = e.data;
- }, false);
-}
-</script>
-</body>
-</html>)rawliteral";
-
-void setup() {
+void setup()
+{
   Serial.begin(115200);
-  initWiFi();
-  initBME();
 
+  if (! rtc.begin()) {
+    Serial.println("Couldn't find RTC");
+    Serial.flush();
+    abort();
+  }
+  display.begin();
+  display.setRotation(1);
+  display.fillScreen(WHITE);
 
-  // Handle Web Server
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send_P(200, "text/html", index_html, processor);
-  });
-
-  // Handle Web Server Events
-  events.onConnect([](AsyncEventSourceClient *client){
-    if(client->lastId()){
-      Serial.printf("Client reconnected! Last message ID that it got is: %u\n", client->lastId());
-    }
-    // send event with message "hello!", id current millis
-    // and set reconnect delay to 1 second
-    client->send("hello!", NULL, millis(), 10000);
-  });
-  server.addHandler(&events);
-  server.begin();
+  if (! rtc.isrunning()) {
+    Serial.println("RTC is NOT running, let's set the time!");
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  }
+  
 }
 
-void loop() {
-  if ((millis() - lastTime) > timerDelay) {
-    getSensorReadings();
-    Serial.printf("Temperature = %.2f ºC \n", temperature);
-    Serial.printf("Humidity = %.2f \n", humidity);
-    Serial.printf("Pressure = %.2f hPa \n", pressure);
-    Serial.println();
+void loop()
+{
+  Serial.println("Tampilan Text ada di TFT LCD di Kit !");
+  Serial.println(" ");
+  DateTime now = rtc.now();
+  String tim = String(now.year());
+  tim += "/";
+  tim += now.month();
+  tim += "/";
+  tim += now.day();
+  tim += " ";
+  tim += now.hour();
+  tim += ":";
+  tim += now.minute();
+  tim += ":";
+  tim += now.second();
 
-    // Send Events to the Web Server with the Sensor Readings
-    events.send("ping",NULL,millis());
-    events.send(String(temperature).c_str(),"temperature",millis());
-    events.send(String(humidity).c_str(),"humidity",millis());
-    events.send(String(pressure).c_str(),"pressure",millis());
-    
-    lastTime = millis();
-  }
+  cetak(20, 10, 2, BLUE, tim);
+
+  cetak(90, 70, 2, BLUE, "MAKERINDO EDU");
+
+}
+
+void cetak(int x, int y, int siz, char warna, String valu) {
+  display.setCursor(x, y);
+  display.setTextSize(siz);
+  display.setTextColor(warna);
+  display.print(valu);
 }

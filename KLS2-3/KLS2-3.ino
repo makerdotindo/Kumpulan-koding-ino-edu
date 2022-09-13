@@ -1,92 +1,52 @@
 /*
-  Adapted from WriteSingleField Example from ThingSpeak Library (Mathworks)
-  
-  Rui Santos
-  Complete project details at https://RandomNerdTutorials.com/esp32-thingspeak-publish-arduino/
-  
-  Permission is hereby granted, free of charge, to any person obtaining a copy
-  of this software and associated documentation files.
-  
-  The above copyright notice and this permission notice shall be included in all
-  copies or substantial portions of the Software.
+  Analog input, analog output, serial output
+
+  Reads an analog input pin, maps the result to a range from 0 to 255 and uses
+  the result to set the pulse width modulation (PWM) of an output pin.
+  Also prints the results to the Serial Monitor.
+
+  The circuit:
+  - potentiometer connected to analog pin 0.
+    Center pin of the potentiometer goes to the analog pin.
+    side pins of the potentiometer go to +5V and ground
+  - LED connected from digital pin 9 to ground through 220 ohm resistor
+
+  created 29 Dec. 2008
+  modified 9 Apr 2012
+  by Tom Igoe
+
+  This example code is in the public domain.
+
+  https://www.arduino.cc/en/Tutorial/BuiltInExamples/AnalogInOutSerial
 */
 
-#include <WiFi.h>
-#include "ThingSpeak.h"
-#include <Adafruit_BME280.h>
-#include <Adafruit_Sensor.h>
+// These constants won't change. They're used to give names to the pins used:
+const int analogInPin = 34;  // Analog input pin that the potentiometer is attached to
+const int analogOutPin = 2; // Analog output pin that the LED is attached to
 
-const char* ssid = "REPLACE_WITH_YOUR_SSID";   // your network SSID (name) 
-const char* password = "REPLACE_WITH_YOUR_PASSWORD";   // your network password
-
-WiFiClient  client;
-
-unsigned long myChannelNumber = X;
-const char * myWriteAPIKey = "XXXXXXXXXXXXXXXX";
-
-// Timer variables
-unsigned long lastTime = 0;
-unsigned long timerDelay = 30000;
-
-// Variable to hold temperature readings
-float temperatureC;
-//uncomment if you want to get temperature in Fahrenheit
-//float temperatureF;
-
-// Create a sensor object
-Adafruit_BME280 bme; //BME280 connect to ESP32 I2C (GPIO 21 = SDA, GPIO 22 = SCL)
-
-void initBME(){
-  if (!bme.begin(0x76)) {
-    Serial.println("Could not find a valid BME280 sensor, check wiring!");
-    while (1);
-  }
-}
+int sensorValue = 0;        // value read from the pot
+int outputValue = 0;        // value output to the PWM (analog out)
 
 void setup() {
-  Serial.begin(115200);  //Initialize serial
-  initBME();
-  
-  WiFi.mode(WIFI_STA);   
-  
-  ThingSpeak.begin(client);  // Initialize ThingSpeak
+  // initialize serial communications at 9600 bps:
+  Serial.begin(9600);
 }
 
 void loop() {
-  if ((millis() - lastTime) > timerDelay) {
-    
-    // Connect or reconnect to WiFi
-    if(WiFi.status() != WL_CONNECTED){
-      Serial.print("Attempting to connect");
-      while(WiFi.status() != WL_CONNECTED){
-        WiFi.begin(ssid, password); 
-        delay(5000);     
-      } 
-      Serial.println("\nConnected.");
-    }
+  // read the analog in value:
+  sensorValue = analogRead(analogInPin);
+  // map it to the range of the analog out:
+  outputValue = map(sensorValue, 0, 1023, 0, 255);
+  // change the analog out value:
+  analogWrite(analogOutPin, outputValue);
 
-    // Get a new temperature reading
-    temperatureC = bme.readTemperature();
-    Serial.print("Temperature (ºC): ");
-    Serial.println(temperatureC);
-    
-    //uncomment if you want to get temperature in Fahrenheit
-    /*temperatureF = 1.8 * bme.readTemperature() + 32;
-    Serial.print("Temperature (ºC): ");
-    Serial.println(temperatureF);*/
-    
-    
-    // Write to ThingSpeak. There are up to 8 fields in a channel, allowing you to store up to 8 different
-    // pieces of information in a channel.  Here, we write to field 1.
-    int x = ThingSpeak.writeField(myChannelNumber, 1, temperatureC, myWriteAPIKey);
-    //uncomment if you want to get temperature in Fahrenheit
-    //int x = ThingSpeak.writeField(myChannelNumber, 1, temperatureF, myWriteAPIKey);
+  // print the results to the Serial Monitor:
+  Serial.print("sensor = ");
+  Serial.print(sensorValue);
+  Serial.print("\t output = ");
+  Serial.println(outputValue);
 
-    if(x == 200){
-      Serial.println("Channel update successful.");
-    }
-    else{
-      Serial.println("Problem updating channel. HTTP error code " + String(x));
-    }
-    lastTime = millis();
-  }
+  // wait 2 milliseconds before the next loop for the analog-to-digital
+  // converter to settle after the last reading:
+  delay(2);
+}

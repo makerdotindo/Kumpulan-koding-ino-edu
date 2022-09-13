@@ -10,52 +10,40 @@
 */
 
 #include <WiFi.h>
- 
+
+// Replace with your network credentials (STATION)
 const char* ssid = "MAKERINDO2";
 const char* password = "makerindo2019";
 
-void WiFiStationConnected(WiFiEvent_t event, WiFiEventInfo_t info){
-  Serial.println("Connected to AP successfully!");
-}
+unsigned long previousMillis = 0;
+unsigned long interval = 30000;
 
-void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info){
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
+void initWiFi() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi ..");
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print('.');
+    delay(1000);
+  }
   Serial.println(WiFi.localIP());
 }
 
-void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info){
-  Serial.println("Disconnected from WiFi access point");
-  Serial.print("WiFi lost connection. Reason: ");
-  Serial.println(info.disconnected.reason);
-  Serial.println("Trying to Reconnect");
-  WiFi.begin(ssid, password);
-}
-
-void setup(){
+void setup() {
   Serial.begin(115200);
-
-  // delete old config
-  WiFi.disconnect(true);
-
-  delay(1000);
-
-  WiFi.onEvent(WiFiStationConnected, SYSTEM_EVENT_STA_CONNECTED);
-  WiFi.onEvent(WiFiGotIP, SYSTEM_EVENT_STA_GOT_IP);
-  WiFi.onEvent(WiFiStationDisconnected, SYSTEM_EVENT_STA_DISCONNECTED);
-
-  /* Remove WiFi event
-  Serial.print("WiFi Event ID: ");
-  Serial.println(eventID);
-  WiFi.removeEvent(eventID);*/
-
-  WiFi.begin(ssid, password);
-    
-  Serial.println();
-  Serial.println();
-  Serial.println("Wait for WiFi... ");
+  initWiFi();
+  Serial.print("RSSI: ");
+  Serial.println(WiFi.RSSI());
 }
 
-void loop(){
-  delay(1000);
+void loop() {
+  unsigned long currentMillis = millis();
+  // if WiFi is down, try reconnecting every CHECK_WIFI_TIME seconds
+  if ((WiFi.status() != WL_CONNECTED) && (currentMillis - previousMillis >=interval)) {
+    Serial.print(millis());
+    Serial.println("Reconnecting to WiFi...");
+    WiFi.disconnect();
+    WiFi.reconnect();
+    previousMillis = currentMillis;
+  }
 }

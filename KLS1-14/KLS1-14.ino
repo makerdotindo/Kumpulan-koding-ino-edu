@@ -1,182 +1,104 @@
-/* ESP32 HTTP IoT Server Example for Wokwi.com
-  https://wokwi.com/arduino/projects/320964045035274834
-  To test, you need the Wokwi IoT Gateway, as explained here:
-  https://docs.wokwi.com/guides/esp32-wifi#the-private-gateway
-  Then start the simulation, and open http://localhost:9080
-  in another browser tab.
-  Note that the IoT Gateway requires a Wokwi Club subscription.
+/*
+  Adapted from WriteSingleField Example from ThingSpeak Library (Mathworks)
+  
+  Rui Santos
+  Complete project details at https://RandomNerdTutorials.com/esp32-thingspeak-publish-arduino/
+  
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files.
+  
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
 */
 
-/*********
-  Rui Santos
-  Complete project details at https://RandomNerdTutorials.com/esp32-esp8266-web-server-http-authentication/
-    The above copyright notice and this permission notice shall be included in all
-  copies or substantial portions of the Software.
-*********/
+#include <WiFi.h>
+#include "ThingSpeak.h"
+#include <Adafruit_BME280.h>
+#include <Adafruit_Sensor.h>
 
-// Import required libraries
-#ifdef ESP32
-  #include <WiFi.h>
-  #include <AsyncTCP.h>
-#else
-  #include <ESP8266WiFi.h>
-  #include <ESPAsyncTCP.h>
-#endif
-#include <ESPAsyncWebServer.h>
+const char* ssid = "MAKERINDO2";   // your network SSID (name) 
+const char* password = "makerindo2019";   // your network password
 
-// Replace with your network credentials
-const char* ssid = "MAKERINDO2";
-const char* password = "makerindo2019";
-const char* http_username = "admin";
-const char* http_password = "admin";
-const char* PARAM_INPUT_1 = "state";
-const int output = 2;
+WiFiClient  client;
 
-// Create AsyncWebServer object on port 80 AsyncWebServer server(80);
+unsigned long myChannelNumber = 1827184;
+const char * myWriteAPIKey = "E5POGDCFX2TDY8K8";
 
-const char index_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE HTML><html>
-<head>
-  <title>ESP Web Server</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    html {font-family: Arial; display: inline-block; text-align: center;}
-    h2 {font-size: 2.6rem;}
-    body {max-width: 600px; margin:0px auto; padding-bottom: 10px;}
-    .switch {position: relative; display: inline-block; width: 120px; height: 68px} 
-    .switch input {display: none}
-    .slider {position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; border-radius: 34px}
-    .slider:before {position: absolute; content: ""; height: 52px; width: 52px; left: 8px; bottom: 8px; background-color: #fff; -webkit-transition: .4s; transition: .4s; border-radius: 68px}
-    input:checked+.slider {background-color: #2196F3}
-    input:checked+.slider:before {-webkit-transform: translateX(52px); -ms-transform: translateX(52px); transform: translateX(52px)}
-  </style>
-</head>
-<body>
-  <h2>ESP Web Server</h2>
-  <button onclick="logoutButton()">Logout</button>
-  <p>Ouput - GPIO 2 - State <span id="state">%STATE%</span></p>
-  %BUTTONPLACEHOLDER%
-<script>function toggleCheckbox(element) {
-  var xhr = new XMLHttpRequest();
-  if(element.checked){ 
-    xhr.open("GET", "/update?state=1", true); 
-    document.getElementById("state").innerHTML = "ON";  
+// Timer variables
+unsigned long lastTime = 0;
+unsigned long timerDelay = 30000;
+
+// Variable to hold temperature readings
+float temperatureC;
+float humidity;
+float pressure;
+//uncomment if you want to get temperature in Fahrenheit
+//float temperatureF;
+
+// Create a sensor object
+Adafruit_BME280 bme; //BME280 connect to ESP32 I2C (GPIO 21 = SDA, GPIO 22 = SCL)
+
+void initBME(){
+  if (!bme.begin(0x76)) {
+    Serial.println("Could not find a valid BME280 sensor, check wiring!");
+    while (1);
   }
-  else { 
-    xhr.open("GET", "/update?state=0", true); 
-    document.getElementById("state").innerHTML = "OFF";      
-  }
-  xhr.send();
-}
-function logoutButton() {
-  var xhr = new XMLHttpRequest();
-  xhr.open("GET", "/logout", true);
-  xhr.send();
-  setTimeout(function(){ window.open("/logged-out","_self"); }, 1000);
-}
-</script>
-</body>
-</html>
-)rawliteral";
-
-const char logout_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE HTML><html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-</head>
-<body>
-  <p>Logged out or <a href="/">return to homepage</a>.</p>
-  <p><strong>Note:</strong> close all web browser tabs to complete the logout process.</p>
-</body>
-</html>
-)rawliteral";
-
-// Replaces placeholder with button section in your web page
-String processor(const String& var){
-  //Serial.println(var);
-  if(var == "BUTTONPLACEHOLDER"){
-    String buttons ="";
-    String outputStateValue = outputState();
-    buttons+= "<p><label class=\"switch\"><input type=\"checkbox\" onchange=\"toggleCheckbox(this)\" id=\"output\" " + outputStateValue + "><span class=\"slider\"></span></label></p>";
-    return buttons;
-  }
-  if (var == "STATE"){
-    if(digitalRead(output)){
-      return "ON";
-    }
-    else {
-      return "OFF";
-    }
-  }
-  return String();
 }
 
-String outputState(){
-  if(digitalRead(output)){
-    return "checked";
-  }
-  else {
-    return "";
-  }
-  return "";
-}
-
-void setup(){
-  // Serial port for debugging purposes
-  Serial.begin(115200);
-
-  pinMode(output, OUTPUT);
-  digitalWrite(output, LOW);
+void setup() {
+  Serial.begin(115200);  //Initialize serial
+  initBME();
   
-  // Connect to Wi-Fi
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Connecting to WiFi..");
-  }
-
-  // Print ESP Local IP Address
-  Serial.println(WiFi.localIP());
-
-  // Route for root / web page
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    if(!request->authenticate(http_username, http_password))
-      return request->requestAuthentication();
-    request->send_P(200, "text/html", index_html, processor);
-  });
-    
-  server.on("/logout", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(401);
-  });
-
-  server.on("/logged-out", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send_P(200, "text/html", logout_html, processor);
-  });
-
-  // Send a GET request to <ESP_IP>/update?state=<inputMessage>
-  server.on("/update", HTTP_GET, [] (AsyncWebServerRequest *request) {
-    if(!request->authenticate(http_username, http_password))
-      return request->requestAuthentication();
-    String inputMessage;
-    String inputParam;
-    // GET input1 value on <ESP_IP>/update?state=<inputMessage>
-    if (request->hasParam(PARAM_INPUT_1)) {
-      inputMessage = request->getParam(PARAM_INPUT_1)->value();
-      inputParam = PARAM_INPUT_1;
-      digitalWrite(output, inputMessage.toInt());
-    }
-    else {
-      inputMessage = "No message sent";
-      inputParam = "none";
-    }
-    Serial.println(inputMessage);
-    request->send(200, "text/plain", "OK");
-  });
+  WiFi.mode(WIFI_STA);   
   
-  // Start server
-  server.begin();
+  ThingSpeak.begin(client);  // Initialize ThingSpeak
 }
-  
+
 void loop() {
-  
+  if ((millis() - lastTime) > timerDelay) {
+    
+    // Connect or reconnect to WiFi
+    if(WiFi.status() != WL_CONNECTED){
+      Serial.print("Attempting to connect");
+      while(WiFi.status() != WL_CONNECTED){
+        WiFi.begin(ssid, password); 
+        delay(5000);     
+      } 
+      Serial.println("\nConnected.");
+    }
+
+    // Get a new temperature reading
+    temperatureC = bme.readTemperature();
+    Serial.print("Temperature (ºC): ");
+    Serial.println(temperatureC);
+    humidity = bme.readHumidity();
+    Serial.print("Humidity (%): ");
+    Serial.println(humidity);
+    pressure = bme.readPressure() / 100.0F;
+    Serial.print("Pressure (hPa): ");
+    Serial.println(pressure);
+    
+    //uncomment if you want to get temperature in Fahrenheit
+    /*temperatureF = 1.8 * bme.readTemperature() + 32;
+    Serial.print("Temperature (ºC): ");
+    Serial.println(temperatureF);*/
+
+    // set the fields with the values
+    ThingSpeak.setField(1, temperatureC);
+    //ThingSpeak.setField(1, temperatureF);
+    ThingSpeak.setField(2, humidity);
+    ThingSpeak.setField(3, pressure);
+    
+    // Write to ThingSpeak. There are up to 8 fields in a channel, allowing you to store up to 8 different
+    // pieces of information in a channel.  Here, we write to field 1.
+    int x = ThingSpeak.writeFields(myChannelNumber, myWriteAPIKey);
+
+    if(x == 200){
+      Serial.println("Channel update successful.");
+    }
+    else{
+      Serial.println("Problem updating channel. HTTP error code " + String(x));
+    }
+    lastTime = millis();
+  }
 }

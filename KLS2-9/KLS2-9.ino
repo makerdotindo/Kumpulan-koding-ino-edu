@@ -1,154 +1,193 @@
 /*********
   Rui Santos
-  Complete project details at http://randomnerdtutorials.com  
+  Complete project details at https://RandomNerdTutorials.com/esp32-web-server-sent-events-sse/
+  
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files.
+  
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
 *********/
 
-// Load Wi-Fi library
 #include <WiFi.h>
-#include <Wire.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
 #include <Adafruit_BME280.h>
 #include <Adafruit_Sensor.h>
 
-//uncomment the following lines if you're using SPI
-/*#include <SPI.h>
-#define BME_SCK 18
-#define BME_MISO 19
-#define BME_MOSI 23
-#define BME_CS 5*/
-
-#define BME_SCK 13
-#define BME_MISO 12
-#define BME_MOSI 11
-#define BME_CS 10
-
-#define SEALEVELPRESSURE_HPA (1013.25)
-
-Adafruit_BME280 bme; // I2C
-//Adafruit_BME280 bme(BME_CS); // hardware SPI
-//Adafruit_BME280 bme(BME_CS, BME_MOSI, BME_MISO, BME_SCK); // software SPI
-
 // Replace with your network credentials
-const char* ssid     = "Oscar Rachman";
-const char* password = "RaiRaka123";
+const char* ssid = "MAKERINDO2";
+const char* password = "makerindo2019";
 
-// Set web server port number to 80
-WiFiServer server(80);
+// Create AsyncWebServer object on port 80
+AsyncWebServer server(80);
 
-// Variable to store the HTTP request
-String header;
+// Create an Event Source on /events
+AsyncEventSource events("/events");
 
-// Current time
-unsigned long currentTime = millis();
-// Previous time
-unsigned long previousTime = 0; 
-// Define timeout time in milliseconds (example: 2000ms = 2s)
-const long timeoutTime = 2000;
+// Timer variables
+unsigned long lastTime = 0;  
+unsigned long timerDelay = 30000;
 
-void setup() {
-  Serial.begin(9600);
-  bool status;
+// Create a sensor object
+Adafruit_BME280 bme;         // BME280 connect to ESP32 I2C (GPIO 21 = SDA, GPIO 22 = SCL)
 
-  // default settings
-  // (you can also pass in a Wire library object like &Wire2)
-  //status = bme.begin();  
-  if (!bme.begin(0x76, &Wire)) {
+float temperature;
+float humidity;
+float pressure;
+
+// Init BME280
+void initBME(){
+    if (!bme.begin(0x76)) {
     Serial.println("Could not find a valid BME280 sensor, check wiring!");
     while (1);
   }
+}
 
-  // Connect to Wi-Fi network with SSID and password
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+void getSensorReadings(){
+  temperature = bme.readTemperature();
+  // Convert temperature to Fahrenheit
+  //temperature = 1.8 * bme.readTemperature() + 32;
+  humidity = bme.readHumidity();
+  pressure = bme.readPressure()/ 100.0F;
+}
+
+// Initialize WiFi
+void initWiFi() {
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(ssid, password);
+    Serial.print("Connecting to WiFi ..");
+    while (WiFi.status() != WL_CONNECTED) {
+        Serial.print('.');
+        delay(1000);
+    }
+    Serial.println(WiFi.localIP());
+}
+
+String processor(const String& var){
+  getSensorReadings();
+  //Serial.println(var);
+  if(var == "TEMPERATURE"){
+    return String(temperature);
   }
-  // Print local IP address and start web server
-  Serial.println("");
-  Serial.println("WiFi connected.");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP());
+  else if(var == "HUMIDITY"){
+    return String(humidity);
+  }
+  else if(var == "PRESSURE"){
+    return String(pressure);
+  }
+  return String();
+}
+
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML><html>
+<head>
+  <title>ESP Web Server</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+  <link rel="icon" href="data:,">
+  <style>
+    html {font-family: Arial; display: inline-block; text-align: center;}
+    p { font-size: 1.2rem;}
+    body {  margin: 0;}
+    .topnav { overflow: hidden; background-color: #50B8B4; color: white; font-size: 1rem; }
+    .content { padding: 20px; }
+    .card { background-color: white; box-shadow: 2px 2px 12px 1px rgba(140,140,140,.5); }
+    .cards { max-width: 800px; margin: 0 auto; display: grid; grid-gap: 2rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+    .reading { font-size: 1.4rem; }
+  </style>
+</head>
+<body>
+  <div class="topnav">
+    <h1>BME280 WEB SERVER (SSE)</h1>
+  </div>
+  <div class="content">
+    <div class="cards">
+      <div class="card">
+        <p><i class="fas fa-thermometer-half" style="color:#059e8a;"></i> TEMPERATURE</p><p><span class="reading"><span id="temp">%TEMPERATURE%</span> &deg;C</span></p>
+      </div>
+      <div class="card">
+        <p><i class="fas fa-tint" style="color:#00add6;"></i> HUMIDITY</p><p><span class="reading"><span id="hum">%HUMIDITY%</span> &percnt;</span></p>
+      </div>
+      <div class="card">
+        <p><i class="fas fa-angle-double-down" style="color:#e1e437;"></i> PRESSURE</p><p><span class="reading"><span id="pres">%PRESSURE%</span> hPa</span></p>
+      </div>
+    </div>
+  </div>
+<script>
+if (!!window.EventSource) {
+ var source = new EventSource('/events');
+ 
+ source.addEventListener('open', function(e) {
+  console.log("Events Connected");
+ }, false);
+ source.addEventListener('error', function(e) {
+  if (e.target.readyState != EventSource.OPEN) {
+    console.log("Events Disconnected");
+  }
+ }, false);
+ 
+ source.addEventListener('message', function(e) {
+  console.log("message", e.data);
+ }, false);
+ 
+ source.addEventListener('temperature', function(e) {
+  console.log("temperature", e.data);
+  document.getElementById("temp").innerHTML = e.data;
+ }, false);
+ 
+ source.addEventListener('humidity', function(e) {
+  console.log("humidity", e.data);
+  document.getElementById("hum").innerHTML = e.data;
+ }, false);
+ 
+ source.addEventListener('pressure', function(e) {
+  console.log("pressure", e.data);
+  document.getElementById("pres").innerHTML = e.data;
+ }, false);
+}
+</script>
+</body>
+</html>)rawliteral";
+
+void setup() {
+  Serial.begin(115200);
+  initWiFi();
+  initBME();
+
+
+  // Handle Web Server
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/html", index_html, processor);
+  });
+
+  // Handle Web Server Events
+  events.onConnect([](AsyncEventSourceClient *client){
+    if(client->lastId()){
+      Serial.printf("Client reconnected! Last message ID that it got is: %u\n", client->lastId());
+    }
+    // send event with message "hello!", id current millis
+    // and set reconnect delay to 1 second
+    client->send("hello!", NULL, millis(), 10000);
+  });
+  server.addHandler(&events);
   server.begin();
 }
 
-void loop(){
+void loop() {
+  if ((millis() - lastTime) > timerDelay) {
+    getSensorReadings();
+    Serial.printf("Temperature = %.2f ºC \n", temperature);
+    Serial.printf("Humidity = %.2f \n", humidity);
+    Serial.printf("Pressure = %.2f hPa \n", pressure);
+    Serial.println();
 
+    // Send Events to the Web Server with the Sensor Readings
+    events.send("ping",NULL,millis());
+    events.send(String(temperature).c_str(),"temperature",millis());
+    events.send(String(humidity).c_str(),"humidity",millis());
+    events.send(String(pressure).c_str(),"pressure",millis());
     
-  WiFiClient client = server.available();   // Listen for incoming clients
-
-  if (client) {                             // If a new client connects,
-    currentTime = millis();
-    previousTime = currentTime;
-    Serial.println("New Client.");          // print a message out in the serial port
-    String currentLine = "";                // make a String to hold incoming data from the client
-    while (client.connected() && currentTime - previousTime <= timeoutTime) {  // loop while the client's connected
-      currentTime = millis();
-      if (client.available()) {             // if there's bytes to read from the client,
-        char c = client.read();             // read a byte, then
-        Serial.write(c);                    // print it out the serial monitor
-        header += c;
-        if (c == '\n') {                    // if the byte is a newline character
-          // if the current line is blank, you got two newline characters in a row.
-          // that's the end of the client HTTP request, so send a response:
-          if (currentLine.length() == 0) {
-            // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
-            // and a content-type so the client knows what's coming, then a blank line:
-            client.println("HTTP/1.1 200 OK");
-            client.println("Content-type:text/html");
-            client.println("Connection: close");
-            client.println();
-            
-            // Display the HTML web page
-            client.println("<!DOCTYPE html><html>");
-            client.println("<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
-            client.println("<link rel=\"icon\" href=\"data:,\">");
-            // CSS to style the table 
-            client.println("<style>body { text-align: center; font-family: \"Trebuchet MS\", Arial;}");
-            client.println("table { border-collapse: collapse; width:35%; margin-left:auto; margin-right:auto; }");
-            client.println("th { padding: 12px; background-color: #0043af; color: white; }");
-            client.println("tr { border: 1px solid #ddd; padding: 12px; }");
-            client.println("tr:hover { background-color: #bcbcbc; }");
-            client.println("td { border: none; padding: 12px; }");
-            client.println(".sensor { color:white; font-weight: bold; background-color: #bcbcbc; padding: 1px; }");
-            
-            // Web Page Heading
-            client.println("</style></head><body><h1>ESP32 with BME280</h1>");
-            client.println("<table><tr><th>MEASUREMENT</th><th>VALUE</th></tr>");
-            client.println("<tr><td>Temp. Celsius</td><td><span class=\"sensor\">");
-            client.println(bme.readTemperature());
-            client.println(" *C</span></td></tr>");  
-            client.println("<tr><td>Temp. Fahrenheit</td><td><span class=\"sensor\">");
-            client.println(1.8 * bme.readTemperature() + 32);
-            client.println(" *F</span></td></tr>");       
-            client.println("<tr><td>Pressure</td><td><span class=\"sensor\">");
-            client.println(bme.readPressure() / 100.0F);
-            client.println(" hPa</span></td></tr>");
-            client.println("<tr><td>Approx. Altitude</td><td><span class=\"sensor\">");
-            client.println(bme.readAltitude(SEALEVELPRESSURE_HPA));
-            client.println(" m</span></td></tr>"); 
-            client.println("<tr><td>Humidity</td><td><span class=\"sensor\">");
-            client.println(bme.readHumidity());
-            client.println(" %</span></td></tr>"); 
-            client.println("</body></html>");
-            
-            // The HTTP response ends with another blank line
-            client.println();
-            // Break out of the while loop
-            break;
-          } else { // if you got a newline, then clear currentLine
-            currentLine = "";
-          }
-        } else if (c != '\r') {  // if you got anything else but a carriage return character,
-          currentLine += c;      // add it to the end of the currentLine
-        }
-      }
-    }
-    // Clear the header variable
-    header = "";
-    // Close the connection
-    client.stop();
-    Serial.println("Client disconnected.");
-    Serial.println("");
+    lastTime = millis();
   }
 }

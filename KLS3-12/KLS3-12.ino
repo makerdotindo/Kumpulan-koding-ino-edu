@@ -10,7 +10,7 @@ GPIO   16 RX      TX
 #include <SoftwareSerial.h>
 int counter = 0;
 
-SoftwareSerial loraSerial(16, 17); // TX, RX
+SoftwareSerial loraSerial(21, 22); // TX, RX
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);

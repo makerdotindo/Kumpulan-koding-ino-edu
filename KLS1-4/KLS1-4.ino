@@ -1,4 +1,6 @@
-
+// Program BME280 via Wifi - Copyright by MAKERINDO EDU 2022
+// SCL=D22
+// SDA=D21
 
 #include <WiFi.h>
 #include <WebServer.h>

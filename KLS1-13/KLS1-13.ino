@@ -1,9 +1,5 @@
-/*********
- Rui Santos
- Complete project details at https://RandomNerdTutorials.com/esp8266-nodemcu-static-fixed-ip-addressarduino/
-*********/
 // Load Wi-Fi library
-#include <ESP8266WiFi.h>
+#include <WiFi.h>
 // Replace with your network credentials
 const char* ssid = "MAKERINDO2";
 const char* password = "makerindo2019";
@@ -15,8 +11,8 @@ String header;
 String output5State = "off";
 String output4State = "off";
 // Assign output variables to GPIO pins
-const int output5 = D5;
-const int output4 = D4;
+const int output5 = 5;
+const int output4 = 4;
 // Current time
 unsigned long currentTime = millis();
 // Previous time
@@ -66,8 +62,7 @@ void loop(){
  String currentLine = ""; // make a String to hold incoming data from the client
  currentTime = millis();
  previousTime = currentTime;
- while (client.connected() && currentTime - previousTime <= timeoutTime) { // loop while the client's
-connected
+ while (client.connected() && currentTime - previousTime <= timeoutTime) { // loop while the client's connected
  currentTime = millis();
  if (client.available()) { // if there's bytes to read from the client,
  char c = client.read(); // read a byte, then
@@ -109,10 +104,8 @@ connected
  client.println("<link rel=\"icon\" href=\"data:,\">");
  // CSS to style the on/off buttons
  // Feel free to change the background-color and font-size attributes to fit your preferences
- client.println("<style>html { font-family: Helvetica; display: inline-block; margin: 0px auto; text-align:
-center;}");
- client.println(".button { background-color: #195B6A; border: none; color: white; padding: 16px
-40px;");
+ client.println("<style>html { font-family: Helvetica; display: inline-block; margin: 0px auto; text-align:center;}");
+ client.println(".button { background-color: #195B6A; border: none; color: white; padding: 16px 40px;");
  client.println("text-decoration: none; font-size: 30px; margin: 2px; cursor: pointer;}");
  client.println(".button2 {background-color: #77878A;}</style></head>");
 
